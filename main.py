@@ -1,106 +1,176 @@
 import requests
 import urllib.parse
+import os
+import sys
+from dotenv import load_dotenv
+from colorama import init, Fore, Style
 
+init(autoreset=True)
+
+load_dotenv()
 route_url = "https://graphhopper.com/api/1/route?"
 key = "d946ea9e-b23d-439a-88e3-92e0ed80c5a2"
 
+def quit_app():
+    print(Fore.CYAN + "\n" + "=" * 65)
+    print(Fore.CYAN + "   Thank you for using Graphhopper Route Planner. Goodbye!")
+    print(Fore.CYAN + "=" * 65 + "\n")
+    sys.exit()
+
+if not key:
+    print(Fore.RED + "\n[!] API Key missing. Please check your .env file.\n")
+    sys.exit()
+
+THICK_LINE = Fore.BLUE + "=" * 65 + Style.RESET_ALL
+THIN_LINE = Fore.BLUE + "-" * 65 + Style.RESET_ALL
+
 def geocoding(location, key):
-    while location == "":
-        location = input("Enter the location again: ")
+    while location.strip() == "":
+        print(Fore.RED + "      [!] Location cannot be empty.")
+        location = input(Fore.CYAN + "      ➔ " + Style.RESET_ALL)
+    
     geocode_url = "https://graphhopper.com/api/1/geocode?"
     url = geocode_url + urllib.parse.urlencode({"q": location, "limit": "1", "key": key})
 
-    replydata = requests.get(url)
+    try:
+        replydata = requests.get(url, timeout=10)
+        replydata.raise_for_status() 
+    except requests.exceptions.RequestException as e:
+        print(Fore.RED + f"      [!] Network/API Error: {e}")
+        return "error", "null", "null", location
+
     json_data = replydata.json()
     json_status = replydata.status_code
 
-    if json_status == 200 and len(json_data["hits"]) != 0:
+    if json_status == 200 and len(json_data.get("hits", [])) != 0:
         lat = json_data["hits"][0]["point"]["lat"]
         lng = json_data["hits"][0]["point"]["lng"]
         name = json_data["hits"][0]["name"]
-        value = json_data["hits"][0]["osm_value"]
+        value = json_data["hits"][0].get("osm_value", "Unknown")
+        country = json_data["hits"][0].get("country", "")
+        state = json_data["hits"][0].get("state", "")
 
-        if "country" in json_data["hits"][0]:
-            country = json_data["hits"][0]["country"]
-        else:
-            country = ""
+        parts = [p for p in [name, state, country] if p]
+        new_loc = ", ".join(parts)
 
-        if "state" in json_data["hits"][0]:
-            state = json_data["hits"][0]["state"]
-        else:
-            state = ""
-
-        if len(state) != 0 and len(country) != 0:
-            new_loc = name + ", " + state + ", " + country
-        elif len(state) != 0:
-            new_loc = name + ", " + state
-        else:
-            new_loc = name
-
-        print("Geocoding API URL for " + new_loc + " (Location Type: " + value + ")\n" + url)
+        print(Fore.GREEN + f"      [+] Found: {new_loc} ({value})\n")
     else:
         lat = "null"
         lng = "null"
         new_loc = location
-        if json_status != 200:
-            print("Geocode API status: " + str(json_status) + "\nError message: " + json_data["message"])
+        print(Fore.RED + f"      [!] Could not find '{location}'.\n")
 
     return json_status, lat, lng, new_loc
 
+print("\n" + Fore.CYAN + "=" * 65)
+print(Fore.CYAN + "                 WELCOME TO GRAPHHOPPER ROUTE PLANNER ")
+print(Fore.CYAN + "=" * 65)
+
 while True:
-    print("\n+++++++++++++++++++++++++++++++++++++++++++++")
-    print("Vehicle profiles available on Graphhopper:")
-    print("+++++++++++++++++++++++++++++++++++++++++++++")
-    print("car, bike, foot")
-    print("+++++++++++++++++++++++++++++++++++++++++++++")
-    profile = ["car", "bike", "foot"]
-    vehicle = input("Enter a vehicle profile from the list above: ")
-    if vehicle == "quit" or vehicle == "q":
-        break
-    elif vehicle in profile:
-        vehicle = vehicle
-    else:
-        vehicle = "car"
-        print("No valid vehicle profile was entered. Using the car profile.")
+    print("\n" + THICK_LINE)
+    print(Fore.YELLOW + "                       NEW ROUTE SETUP                         ")
+    print(THICK_LINE)
+    
+    while True:
+        print(Fore.WHITE + "\n  [?] Choose your unit preference (m = miles, k = kilometers, q = quit)")
+        unit_pref = input(Fore.CYAN + "   ➔ " + Style.RESET_ALL).lower().strip()
+        if unit_pref in ['q', 'quit']: quit_app()
+        
+        if unit_pref in ['m', 'miles', 'mile']: 
+            use_miles = True
+            break
+        elif unit_pref in ['k', 'km', 'kilometers', 'kilometer']:
+            use_miles = False
+            break
+        print(Fore.RED + "      [!] Invalid input. Please enter 'm' or 'k'.")
 
-    loc1 = input("Starting Location: ")
-    if loc1 == "quit" or loc1 == "q":
-        break
-    orig = geocoding(loc1, key)
+    while True:
+        print(Fore.WHITE + "\n  [?] Choose a vehicle profile (car, bike, foot, or q = quit)")
+        v_input = input(Fore.CYAN + "   ➔ " + Style.RESET_ALL).lower().strip()
+        if v_input in ['q', 'quit']: quit_app()
+        
+        if v_input in ['c', 'car']: 
+            vehicle = 'car'
+            break
+        elif v_input in ['b', 'bike', 'bicycle']: 
+            vehicle = 'bike'
+            break
+        elif v_input in ['f', 'foot', 'walk']: 
+            vehicle = 'foot'
+            break
+        print(Fore.RED + "      [!] Invalid profile. Please choose: car, bike, or foot.")
 
-    loc2 = input("Destination: ")
-    if loc2 == "quit" or loc2 == "q":
-        break
-    dest = geocoding(loc2, key)
-    print("=================================================")
+    print("\n" + THIN_LINE)
+    
+    while True:
+        print(Fore.WHITE + "\n  [?] Starting Location (e.g., Manila, or q = quit)")
+        loc1 = input(Fore.CYAN + "   ➔ " + Style.RESET_ALL).strip()
+        if loc1.lower() in ['quit', 'q']: quit_app()
+        orig = geocoding(loc1, key)
+        if orig[0] != "error" and orig[1] != "null":
+            break
 
-    if orig[0] == 200 and dest[0] == 200:
-        op = "&point=" + str(orig[1]) + "%2C" + str(orig[2])
-        dp = "&point=" + str(dest[1]) + "%2C" + str(dest[2])
-        paths_url = route_url + urllib.parse.urlencode({"key": key, "vehicle": vehicle}) + op + dp
-        paths_reply = requests.get(paths_url)
-        paths_status = paths_reply.status_code
-        paths_data = paths_reply.json()
-        print("Routing API Status: " + str(paths_status) + "\nRouting API URL:\n" + paths_url)
+    while True:
+        print(Fore.WHITE + "  [?] Destination (e.g., Baguio, or q = quit)")
+        loc2 = input(Fore.CYAN + "   ➔ " + Style.RESET_ALL).strip()
+        if loc2.lower() in ['quit', 'q']: quit_app()
+        dest = geocoding(loc2, key)
+        if dest[0] != "error" and dest[1] != "null":
+            break
 
-        print("=================================================")
-        print("Directions from " + orig[3] + " to " + dest[3] + " by " + vehicle)
-        print("=================================================")
-        if paths_status == 200:
-            miles = (paths_data["paths"][0]["distance"]) / 1000 / 1.61
-            km = (paths_data["paths"][0]["distance"]) / 1000
-            sec = int(paths_data["paths"][0]["time"] / 1000 % 60)
-            min = int(paths_data["paths"][0]["time"] / 1000 / 60 % 60)
-            hr = int(paths_data["paths"][0]["time"] / 1000 / 60 / 60)
+    op = "&point=" + str(orig[1]) + "%2C" + str(orig[2])
+    dp = "&point=" + str(dest[1]) + "%2C" + str(dest[2])
+    paths_url = route_url + urllib.parse.urlencode({"key": key, "vehicle": vehicle}) + op + dp
+    
+    try:
+        paths_reply = requests.get(paths_url, timeout=10)
+        paths_reply.raise_for_status()
+    except requests.exceptions.RequestException as e:
+        print(Fore.RED + f"\n[!] Routing failed: {e}")
+        continue
 
-            print("Distance Traveled: {0:.1f} miles / {1:.1f} km".format(miles, km))
-            print("Trip Duration: {0:02d}:{1:02d}:{2:02d}".format(hr, min, sec))
-            print("=================================================")
-            for each in range(len(paths_data["paths"][0]["instructions"])):
-                path = paths_data["paths"][0]["instructions"][each]["text"]
-                distance = paths_data["paths"][0]["instructions"][each]["distance"]
-                print("{0} ( {1:.1f} km / {2:.1f} miles )".format(path, distance / 1000, distance / 1000 / 1.61))
-            print("=============================================")
+    paths_status = paths_reply.status_code
+    paths_data = paths_reply.json()
+
+    print("\n" + THICK_LINE)
+    print(Fore.CYAN + f" NAVIGATION: {orig[3]} ➔ {dest[3]}")
+    print(THICK_LINE)
+
+    if paths_status == 200:
+        distance_m = paths_data["paths"][0]["distance"]
+        time_ms = paths_data["paths"][0]["time"]
+        
+        miles = (distance_m / 1000) / 1.60934
+        km = distance_m / 1000
+        
+        sec = int(time_ms / 1000 % 60)
+        min = int(time_ms / 1000 / 60 % 60)
+        hr = int(time_ms / 1000 / 60 / 60)
+
+        if use_miles:
+            print(Fore.YELLOW + f" VEHICLE: {vehicle.upper():<6} | DISTANCE: {miles:.1f} mi | TIME: {hr:02d}:{min:02d}:{sec:02d}")
         else:
-            print("Error message: " + paths_data["message"])
-            print("*************************************************")
+            print(Fore.YELLOW + f" VEHICLE: {vehicle.upper():<6} | DISTANCE: {km:.1f} km | TIME: {hr:02d}:{min:02d}:{sec:02d}")
+            
+        print(THIN_LINE)
+        
+        for step in paths_data["paths"][0]["instructions"]:
+            path = step["text"]
+            step_distance_m = step["distance"]
+            
+            if use_miles:
+                step_dist = step_distance_m / 1000 / 1.60934
+                unit = "mi"
+            else:
+                if step_distance_m < 1000:
+                    step_dist = step_distance_m
+                    unit = "m"
+                else:
+                    step_dist = step_distance_m / 1000
+                    unit = "km"
+                
+            print(Fore.WHITE + f"  • {path:<45} " + Fore.LIGHTBLACK_EX + f"({step_dist:.1f} {unit})")
+            
+        print(THICK_LINE)
+    else:
+        print(Fore.RED + " [!] Routing error: " + paths_data.get("message", "Unknown error"))
